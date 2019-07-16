@@ -63,6 +63,13 @@ end
 table.sort(files, function(v1,v2) return v1[2] < v2[2] end)
 local cmd_file = ""
 local seq = ""
+local fBuildTime = io.open("BuildTime.lua", "w+")
+fBuildTime:write([[
+_G._BUILDTIME = "]] .. os.date("%Y-%m-%d %H:%M:%S") .. [["
+]])
+fBuildTime:close()
+cmd_file = cmd_file .. " BuildTime.lua"
+
 for i,v in ipairs(files) do
     cmd_file = cmd_file .. " " .. v[1]
     seq = seq .. " " .. v[1] .. ":r("..concat(req_chain[v[1]], ",") .. ")  "
@@ -75,3 +82,4 @@ end
 
 os.execute("luac"..cmd_opt..cmd_file)
 
+os.execute("del BuildTime.lua")
