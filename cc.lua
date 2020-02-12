@@ -3,7 +3,7 @@ local req_tree = {}
 local cur_req = req_tree
 local collect_require = function(x)
     local last_req = cur_req
-	cur_req[x] = cur_req[x] or {}
+    cur_req[x] = cur_req[x] or {}
     cur_req = cur_req[x]
     local r = old_require(x)
     cur_req = last_req
@@ -19,7 +19,7 @@ function count_req(t)
         local c = counts[k] or count_req(v)
         if not counts[k] then
             files[#files+1] = k
-			counts[k] = c
+            counts[k] = c
         end
         r = r + c
     end
