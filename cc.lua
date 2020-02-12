@@ -1,85 +1,30 @@
--- cc.lua
--- a luac wrapper, sort the input file by require chain, then pass them to luac
-local opts = {}
+local old_require = _G.require
+local req_tree = {}
+local cur_req = req_tree
+local collect_require = function(x)
+    local last_req = cur_req
+	cur_req[x] = cur_req[x] or {}
+    cur_req = cur_req[x]
+    local r = old_require(x)
+    cur_req = last_req
+    return r
+end
+_G.require = collect_require
+require(arg[1])
+local counts = {}
 local files = {}
-local parse_only = false
--- gather option and input files
-for i=1,#arg do
-    local v = arg[i]
-    if v:sub(1,1) == "-" then
-        opts[#opts+1] = v
-        if v:sub(1,2) == '-o' then
-            opts[#opts+1] = arg[i+1]
-            i = i + 1
-        end
-        parse_only = parse_only or (v:sub(1,2) == '-p')
-    else
-        files[#files+1] = v
-    end
-end
--- build option
-local cmd_opt = ""
-for i,v in ipairs(opts) do
-    cmd_opt = cmd_opt .. " " .. v
-end
-
-local req_chain = {}
-for i,v in ipairs(files) do req_chain[v] = {} end
-local function get_require(name)
-    for l in io.lines(name) do
-        string.gsub(l, "require%s*%(%s*\"([^\"]+)\"%s*%)%s*", function(require_name)
-            require_name = require_name .. ".lua"
-            local t = req_chain[name]
-            if t then
-                t[require_name] = true
-                for k,v in pairs(req_chain[require_name] or {}) do
-                    t[k] = v
-                end
-            end
-        end)
-    end
-    return r
-end
-for i,v in ipairs(files) do get_require(v) end
-
-local function count(t)
-    local r = 0
-    for k,v in pairs(t) do r = r + 1 end
-    return r
-end
-local function concat(t, sep)
-    local r, s = "", ""
+function count_req(t)
+    local r = 1
     for k,v in pairs(t) do
-        r = r .. s .. k
-        s = sep
+        local c = counts[k] or count_req(v)
+        if not counts[k] then
+            files[#files+1] = k
+			counts[k] = c
+        end
+        r = r + c
     end
     return r
 end
-
-files = {}
-for k,v in pairs(req_chain) do
-    files[#files + 1] = {k,count(v)}
-end
-table.sort(files, function(v1,v2) return v1[2] < v2[2] end)
-local cmd_file = ""
-local seq = ""
-local fBuildTime = io.open("BuildTime.lua", "w+")
-fBuildTime:write([[
-_G._BUILDTIME = "]] .. os.date("%Y-%m-%d %H:%M:%S") .. [["
-]])
-fBuildTime:close()
-cmd_file = cmd_file .. " BuildTime.lua"
-
-for i,v in ipairs(files) do
-    cmd_file = cmd_file .. " " .. v[1]
-    seq = seq .. " " .. v[1] .. ":r("..concat(req_chain[v[1]], ",") .. ")  "
-end
-
-if parse_only then
-print("require chain", seq)
-print("invoke luac"..cmd_opt..cmd_file)
-end
-
-os.execute("luac"..cmd_opt..cmd_file)
-
-os.execute("del BuildTime.lua")
+count_req(req_tree)
+table.sort(files, function(v1,v2)  return counts[v1]<counts[v2] end)
+os.execute("luac "..table.concat(files, ".lua ")..".lua")
